@@ -1,10 +1,11 @@
 ---
 title: "Learning tidyverts with Rob Hyndman"
-output: html_notebook
+output: html
 ---
 
 Following along the PDF from the Rob J Hyndman website.
 https://robjhyndman.com/seminars/tidyverts2021/
+tidyverts.org
 
 The title of the presentation is "Feasts & fables: Time series analysis using R"
 
