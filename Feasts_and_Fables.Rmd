@@ -25,5 +25,5 @@ global_economy
 library(feasts)
 library(fable)
 ```
-```
+
 
