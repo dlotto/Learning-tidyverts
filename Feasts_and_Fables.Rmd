@@ -6,20 +6,24 @@ output: html_notebook
 Following along the PDF from the Rob J Hyndman website.
 https://robjhyndman.com/seminars/tidyverts2021/
 
+The title of the presentation is "Feasts & fables: Time series analysis using R"
 
 ```{r tsibble}
-library("tsibble")
-library("tsibbledata")
-
+library(tsibble)
+library(tsibbledata)
+library(fpp3)
 ```
 
+```{r examine a tsibble}
+global_economy
+```
 
 
 
 <!-- Will use this later -->
 ```{r}
-library("feasts")
-library("fable")
+library(feasts)
+library(fable)
 ```
 ```
 
