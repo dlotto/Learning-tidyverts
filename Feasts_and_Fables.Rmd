@@ -6,13 +6,18 @@ IMPORTANT: This document will follow closely along the PDF from the Rob J Hyndma
 https://robjhyndman.com/seminars/tidyverts2021/
 **This is a learning exercise. I do not claim this as original work**
 
-For more information: tidyverts.org
+For more information: tidyverts.org 
+Forecasting: Principle and Practice: https://otexts.com/fpp3
 
 The title of the presentation is "Feasts & fables: Time series analysis using R"
 
 ```{r tsibble}
+library(magrittr)
 library(tsibble)
 library(tsibbledata)
+library(feasts)
+library(fable)
+library(ggplot2)
 library(fpp3)
 ```
 # tsibble: Time series data
@@ -61,10 +66,6 @@ Common time index variable can be created with these functions.
 <section>
 
 ## Australian holidays
-```{r setup}
-library(feasts)
-tourism
-```
 
 ```{r}
 holidays <- tourism %>% 
@@ -140,12 +141,115 @@ google_2015 %>%
   autoplot()
 ```
 
+# feasts: Time series features
+Seasonal and trend decomposition using Loess (STL)
+y(t) = T(t)+S(t)+R(t)
 
+Loess is a method for estimating nonlinear relationships. 
 
+Taken from https://stats.stackexchange.com/questions/294981/how-does-loess-decomposition-work
+> The basic idea of the loess smoother is pretty simple. If we have inputs x and response y, to get an estimate at x0, we first compute the weight distances of the points of x from x0 and then perform linear regression, where we downweight values of x that are farther away from x0. Our weighted regression model at xo then provides our loess estimate. You can also include polynomial expansions of x as well.
 
-<!-- Will use this later -->
+* Use a type of sliding window to divide the data into smaller blobs.
+* At each data point, use weighted least squares to fit a line.
+* Then, to reduce the influence of outliers, create an additional weight for the weighted least squares. This additional weight is based on how far the original point (x) is from the new point (x0).
+* You can fit a line or a parabola to the points in the window.
+
+## Basic STL Decomposition
 ```{r}
-library(fable)
+fpp3::canadian_gas %>% 
+  stl(t.window = 12, s.window = "periodic", robust = TRUE) %>% 
+  plot()
 ```
+
+## fabletools STL Decomposition
+From https://otexts.com/fpp3/stl.html
+> By default, the `STL()` function provides a convenient automated STL decomposition using a seasonal window of `season(window = 13)`, and the trend window chosen automatically from the seasonal period. The default session for monthly data is `trend(window=21)`. This usually gives a good balance between overfitting the seasonality and allowing it to slowly change over time. 
+In the case below, the defaut trend window setting produces a trend-cycle component that is too rigid. As a result, the signal from the 2008 GFC has leaked into the remainder component. Selecting a shorter trend window improves this.
+
+```{r retail_emp data setup}
+us_retail_employment <- fpp3::us_employment %>% 
+  dplyr::filter(Title == "Retail Trade", lubridate::year(Month) >= 1990) %>%
+  dplyr::select(-Series_ID)
+```
+
+### Decomposition components
+```{r}
+dcmp <- us_retail_employment %>% 
+  fabletools::model(stl = feasts::STL(Employed))
+
+fabletools::components(dcmp)
+```
+
+### Overlay trend component
+```{r}
+components(dcmp) %>% 
+  as_tsibble() %>% 
+  autoplot(Employed, color = "gray") +
+  geom_line(aes(y=trend), color = "#D55E00") +
+  labs(
+    y = "Persons (thousands)",
+    title = "Total employment in US retail"
+  )
+```
+
+### Plotting the components
+Plotting all the components with `autoplot`
+```{r}
+us_retail_employment %>% 
+  fabletools::model(
+    feasts::STL(Employed ~ trend(window = 7) + season(window = "periodic"),
+                robust = TRUE)) %>% 
+  fabletools::components() %>% 
+  ggplot2::autoplot()
+```
+
+
+## Feature extraction and statistics
+
+### Plotting trend and seasonal strength
+```{r}
+tourism %>% 
+  fabletools::features(Trips, feasts::feat_stl) %>% 
+  ggplot2::ggplot(aes(x = trend_strength, y = seasonal_strength_year, col = Purpose)) +
+  ggplot2::geom_point() +
+  ggplot2::facet_wrap(vars(State))
+```
+
+### Find the most seasonal time series
+```{r}
+most_seasonal <- tourism %>% 
+  fabletools::features(Trips, features = feat_stl) %>% 
+  dplyr::filter(seasonal_strength_year == max(seasonal_strength_year))
+
+tourism %>% 
+  dplyr::right_join(most_seasonal, by = c("State","Region","Purpose")) %>% 
+  ggplot2::ggplot(aes(x = Quarter, y = Trips)) +
+  ggplot2::geom_line() +
+  ggplot2::facet_grid(vars(State, Region, Purpose))
+```
+
+### Find the most trended time series
+```{r}
+most_trended <- tourism %>% 
+  fabletools::features(Trips, features = feat_stl) %>% 
+  filter(trend_strength == max(trend_strength))
+
+tourism %>% 
+  right_join(most_trended, by = c("State","Region","Purpose")) %>% 
+  ggplot(aes(x = Quarter, y = Trips)) +
+  geom_line() +
+  facet_grid(vars(State, Region, Purpose))
+```
+
+### All features from feasts package
+
+
+
+
+
+
+
+
 
 
