@@ -2,10 +2,11 @@
 title: "Learning tidyverts with Rob Hyndman"
 output: html
 ---
-
-Following along the PDF from the Rob J Hyndman website.
+IMPORTANT: This document will follow closely along the PDF from the Rob J Hyndman website. Located here:
 https://robjhyndman.com/seminars/tidyverts2021/
-tidyverts.org
+**This is a learning exercise. I do not claim this as original work**
+
+For more information: tidyverts.org
 
 The title of the presentation is "Feasts & fables: Time series analysis using R"
 
@@ -14,16 +15,136 @@ library(tsibble)
 library(tsibbledata)
 library(fpp3)
 ```
+# tsibble: Time series data
+<section>
 
+## Examine a tsibble
+The features of a tsibble object are the Index, the Key, and the Measured Variables.
+In this case, for the global_economy table, we have Year (index), Country (key), and GDP, Imports, etc (measured variables).
 ```{r examine a tsibble}
 global_economy
 ```
+
+### tsibble objects
+A tsibble allows storage and manipulation of multiple time series in R. And it works with tidyverse functions!
+
+* Index: Time information about the observation
+* Key(s): optional unique identifiers for each series.
+* Measured Variables: numbers of interest
+
+## Converting to a tsibble object
+
+* Convert the ymd<date> into the Quarter<qrt> variable
+* Remove the ymd variable.
+* Convert to tsibble. Set the 'index' to the <qrt> and the unique identifying 'keys'.
+```{r converting to tsibble}
+prison <- readr::read_csv("tidyverts2021/data/prison_population.csv", show_col_types = FALSE) %>% 
+  dplyr::mutate(Quarter = tsibble::yearquarter(date)) %>% 
+  dplyr::select(-date) %>% 
+  tsibble::as_tsibble(
+    index = Quarter,
+    key = c(state, gender, legal, indigenous)
+  )
+```
+
+### tsibble indexes
+Common time index variable can be created with these functions.
+```{r tsibble indexes}
+# Quarterly -   tsibble::yearquarter()
+# Monthly -     tsibble::yearmonth()
+# Weekly -      tsibble::yearweek()
+# Daily -       lubridate::as_date(), lubridate::ymd()
+# Sub-daily -   lubridate::as_datetime()
+```
+
+# feasts: Data visualization
+<section>
+
+## Australian holidays
+```{r setup}
+library(feasts)
+tourism
+```
+
+```{r}
+holidays <- tourism %>% 
+  dplyr::filter(Purpose == "Holiday") %>% 
+  dplyr::group_by(State) %>% 
+  dplyr::summarise(Trips = sum(Trips)) %>% 
+  dplyr::mutate(
+    State = case_when(State == "New South Wales" ~ "NSW",
+                      State == "Northern Territory" ~ "NT",
+                      State == "Queensland" ~ "QLD",
+                      State == "South Australia" ~ "SA",
+                      State == "Tasmania" ~ "TAS",
+                      State == "Victoria" ~ "VIC",
+                      State == "Western Australia" ~ "WA",
+                      TRUE ~ State
+    ))
+```
+
+## Time Plots
+
+* Plotted against time: autoplot() (each series overplotted)
+* Plotted against season: gg_season() (facet by key)
+* Plotted against time with seasonal facets: gg_subseries() (facet by key)
+
+### autoplot
+```{r}
+library(ggplot2)
+holidays %>% autoplot(Trips) +
+  ylab("thousands of trips") +
+  ggtitle("Australian domestic holiday nights")
+```
+
+### gg_season
+```{r}
+holidays %>% feasts::gg_season(Trips) +
+  ylab("thousands of trips") +
+  ggtitle("Australian domestic holiday nights")
+```
+
+### gg_subseries
+```{r}
+holidays %>% feasts::gg_subseries(Trips) +
+  ylab("thousands of trips") +
+  ggtitle("Australian domestic holiday nights")
+```
+
+## Victorian Electricity Demand
+```{r}
+vic_elec %>% feasts::gg_season(Demand)
+vic_elec %>% feasts::gg_season(Demand, period = "week")
+vic_elec %>% feasts::gg_season(Demand, period = "day")
+```
+
+## Autocorrelations
+```{r acf plots}
+holidays %>% 
+  feasts::ACF(Trips) %>% 
+  ggplot2::autoplot()
+```
+### Google stock price
+```{r}
+google_2015 <- gafa_stock %>% 
+  dplyr::filter(Symbol == "GOOG",
+                lubridate::year(Date) == 2015) %>% 
+  dplyr::select(Date, Close)
+
+google_2015 %>% autoplot(Close)
+```
+#### Handling irregular data
+```{r}
+google_2015 %>% 
+  ACF(Close, lag_max = 100) %>% 
+  autoplot()
+```
+
 
 
 
 <!-- Will use this later -->
 ```{r}
-library(feasts)
 library(fable)
 ```
 
