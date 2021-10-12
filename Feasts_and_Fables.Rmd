@@ -11,7 +11,7 @@ Forecasting: Principle and Practice: https://otexts.com/fpp3
 
 The title of the presentation is "Feasts & fables: Time series analysis using R"
 
-```{r tsibble}
+```{r setup}
 library(magrittr)
 library(tsibble)
 library(tsibbledata)
@@ -244,8 +244,163 @@ tourism %>%
 
 ### All features from feasts package
 
+```{r}
+tourism_features <- tourism %>% 
+  features(Trips, feature_set(pkgs = "feasts"))
+```
+
+Now we apply some *principle components* based on all features from the feasts package
+
+#### How to do PCA
+https://builtin.com/data-science/step-step-explanation-principal-component-analysis
+
+* Standardize the range of continuous initial variables
+* Compute the covariance matrix to identify correlations
+* Compute the eigenvectors and eigenvalues of the covariance matrix to identify the principle components
+* Create a feature vector to decide which principle components to keep
+* Recast the data along the principle components axes
+
+```{r}
+pcs <- tourism_features %>% 
+  select(-State, -Region, -Purpose) %>% 
+  stats::prcomp(scale = TRUE) %>% 
+  broom::augment(tourism_features)
+
+# Principle components based on all the features from the feasts package
+pcs %>% ggplot(aes(x=.fittedPC1, y=.fittedPC2)) +
+  geom_point() +
+  theme(aspect.ratio = 1)
+```
+
+The Purpose of the travel appears to be a driving factor in the feature vector.
+```{r}
+pcs %>% ggplot(aes(x=.fittedPC1, y=.fittedPC2, col = Purpose)) +
+  geom_point() +
+  theme(aspect.ratio = 1)
+```
+
+# fable: Forecasting
+A forecast is an estimate of the probability distribution of a variable to be observed in the future.
+
+## Model fitting
+```{r}
+holiday_fit <- holidays %>% 
+  fabletools::model(
+    snaive = fable::SNAIVE(Trips),
+    naive = fable::NAIVE(Trips),
+    ets = fable::ETS(Trips),
+    arima = fable::ARIMA(Trips)
+  )
+```
+
+```{r}
+holiday_fit %>% 
+  filter(State == "VIC") %>% 
+  select(arima) %>% 
+  fabletools::report()
+```
+
+```{r}
+fabletools::glance(holiday_fit)
+fabletools::tidy(holiday_fit)
+fabletools::augment(holiday_fit)
+```
+## Ljung-Box Test
+```{r}
+augment(holiday_fit) %>% 
+  filter(State == "VIC", .model == "arima") %>% 
+  features(.resid, feasts::ljung_box, dof = 2, lag = 8)
+```
+
+## TS Residuals
+```{r}
+holiday_fit %>% 
+  filter(State == "VIC") %>% 
+  select(arima) %>% 
+  feasts::gg_tsresiduals()
+```
+
+## Producing forecasts
+```{r}
+holiday_fc <- holiday_fit %>% 
+  fabletools::forecast(h = "2 years")
+
+vic_fc <- holiday_fc %>% 
+  filter(State == "VIC")
+```
+
+## Visualizing forecasts
+```{r}
+holiday_fc %>% 
+  filter(State == "VIC") %>% 
+  autoplot(holidays, level = NULL) %>% 
+  labs(title = "Holidays in Victoria", y = "Thousands of visitors") %>%  
+  guides(color = guide_legend(title = "Forecast"))
+```
 
 
+```{r}
+holiday_fc %>% 
+  filter(State == "VIC", .model == "arima") %>% 
+  autoplot(holidays) %>% 
+  labs(title = "Holidays in Victoria", y = "Thousands of visitors") %>%  
+  guides(color = guide_legend(title = "Forecast"))
+```
+
+## Prediction intervals
+
+* Point forecasts often useless without a measure of uncertainty (such as prediction intervals)
+* Prediction intervals require a stochastic model (with random errors, etc)
+* For most models, prediction intervals get wider as the forecast horizon increases
+* Use `level` an argument to control coverage
+* Check residual assumptions before believing them
+* Usually too narrow due to unaccounted uncertainty
+```{r}
+holiday_fc %>% fabletools::hilo(level = 95)
+```
+
+# fable: Evaluating forecast accuracy
+
+* A model which fits the training data well will not necessarily forecast well.
+* A perfect fit can always be obtained by using a model with enough parameters.
+* Over-fitting a model to data is just as bad as failing to identify a systematic pattern in the data.
+* The test set must not be used for **any** aspect of a model development or calculation of forecasts.
+* Forecast accuracy is based only on the test set.
+
+```{r}
+# Not sure why this isn't working correctly
+fabletools::accuracy(holiday_fc, holidays)
+```
+
+## Time series cross-validation
+Stretch with a minimum length of 4 years, growing by 1 quarter each step.
+```{r}
+vic_holiday_stretch <- holidays %>% 
+  filter(State == "VIC") %>% 
+  tsibble::stretch_tsibble(.init = 16, .step = 1)
+
+vic_holiday_stretch
+```
+
+
+```{r}
+fit_cv <- vic_holiday_stretch %>% 
+  model(
+    ets = ETS(Trips),
+    arima = ARIMA(Trips),
+    snaive = SNAIVE(Trips)
+  )
+```
+
+```{r}
+fc_cv <- fit_cv %>% 
+  forecast(h = 1)
+```
+
+A good way to choose the best forecasting model is to find the model with the smallest RMSE computed using time series cross-validation
+```{r}
+fc_cv %>% accuracy(holidays)
+```
 
 
 
